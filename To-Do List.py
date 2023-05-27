@@ -1,8 +1,7 @@
 import json
-import threading
 import tkinter as tk
 from tkinter import messagebox
-import datetime
+
 
 root = tk.Tk()
 root.title("To-Do List")
@@ -35,6 +34,9 @@ def reset_stats():
         json.dump(data, f)
 
 def clear_tasks():
+    global current_job
+    current_job = None
+    reset_timer()
     tasks.clear()
     task_listbox.delete(0, tk.END)
     reset_stats() # обнуление статистики
@@ -85,42 +87,50 @@ def update_stats():
         percent_completed = int(num_completed / num_tasks * 100)
         stats_label.configure(text=f"Выполнено: {percent_completed}% ({num_completed} из {num_tasks})")
 
-def countdown(task_label, due_time):
-    remaining_seconds = (due_time - datetime.datetime.now()).total_seconds()
-    while remaining_seconds > 0:
-        mins, secs = divmod(remaining_seconds, 60)
-        hours, mins = divmod(mins, 60)
-        task_label.configure(text=f"{task_label['text']} ({int(hours):02}:{int(mins):02}:{int(secs):02})")
-        remaining_seconds = max(0, remaining_seconds - 1)
-        datetime.time.sleep(1)
+def start_timer():
+    if not task_listbox.curselection():
+        messagebox.showerror("Ошибка", "Пожалуйста, выберите задачу.")
+        return
+    try:
+        timer_data = timer_entry.get().split(":")
+        hours = int(timer_data[0])
+        minutes = int(timer_data[1])
+        seconds = int(timer_data[2])
+        total_seconds = hours * 3600 + minutes * 60 + seconds
+        countdown(total_seconds)
+    except:
+        messagebox.showerror("Ошибка", "Пожалуйста, введите время в формате ЧЧ:ММ:СС")
 
+def reset_timer():
+    global current_job
+    timer_entry.delete(0, tk.END)
+    timer_entry.insert(0, "00:00:00")
+    if current_job is not None:
+        root.after_cancel(current_job)
+        current_job = None
 
+def countdown(total_seconds):
+    global current_job
+    current_task = task_listbox.get(tk.ACTIVE)
+    if current_task.endswith("(done)"): # если текущая задача уже выполнена, то не запускаем таймер
+        timer_entry.delete(0, tk.END)
+        return
+    if total_seconds <= 0:
+        messagebox.showinfo("Сообщение", f"Задача '{current_task}' достигла времени выполнения.")
+        complete_task() # отмечаем задачу как выполненную
+    else:
+        timer_entry.delete(0, tk.END) # очистка поля ввода времени таймера
+        hours = total_seconds// 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        timer_entry.insert(0, f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+        current_job = root.after(1000, countdown, total_seconds-1)
 
-def add_timed_task():
-    task = task_entry.get()
-    if task != "":
-        due_time = datetime.datetime.now()
-        time_str = timer_entry.get()
-        if time_str:
-            try:
-                hours, minutes, seconds = map(int, time_str.split(":"))
-                due_time += datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
-            except ValueError:
-                messagebox.showerror("Ошибка", "Пожалуйста, введите время в формате Часы:Минуты:Секунды.")
-                return
-            if due_time > datetime.datetime.now():
-                task_listbox.insert(tk.END, f"{task} (до {due_time.strftime('%H:%M:%S')})")
-                task_label = task_listbox.get(tk.END)
-                threading.Thread(target=countdown, args=(task_label, due_time)).start()
-                task_entry.delete(0, tk.END)
-                timer_entry.delete(0, tk.END)
-            else:
-                messagebox.showerror("Ошибка", "Пожалуйста, введите корректное время в будущем.")
-        else:
-            tasks.append(task)
-            task_listbox.insert(tk.END, task)
-            task_entry.delete(0, tk.END)
-            update_stats()
+reset_timer_button = tk.Button(root, text="Обнулить таймер", command=reset_timer)
+reset_timer_button.grid(row=2, column=3, padx=5, pady=5, sticky=tk.E+tk.W)
+
+start_timer_button = tk.Button(root, text="Начать таймер", command=start_timer)
+start_timer_button.grid(row=2, column=2, padx=5, pady=5, sticky=tk.E+tk.W)
 
 task_label = tk.Label(root, text="Задачи:")
 task_label.grid(row=0, column=0, padx=5, pady=5)
@@ -150,20 +160,11 @@ complete_task_button.grid(row=6, column=0, padx=5, pady=5, sticky=tk.E+tk.W)
 timer_label = tk.Label(root, text="Впишите таймер (Часы:Минуты:Секунды):")
 timer_label.grid(row=0, column=2, padx=5, pady=5)
 
-
-
-
-
-
 timer_entry = tk.Entry(root, width=20)
 timer_entry.grid(row=1, column=2, padx=5, pady=5, sticky=tk.E+tk.W)
-
-add_timed_task_button = tk.Button(root, text="Добавить задачу с таймером", command=add_timed_task)
-add_timed_task_button.grid(row=3, column=2, padx=5, pady=5, sticky=tk.E+tk.W)
 
 stats_label = tk.Label(root, text="")
 stats_label.grid(row=7, column=0, padx=5, pady=5, sticky=tk.E+tk.W)
 
 update_stats()
 root.mainloop()
-
